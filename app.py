@@ -9,43 +9,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (Strict Single-Line Alignment & Highlighted Red KPI Boxes)
-st.markdown("""
-    <style>
-    .stApp { background-color: #f8fafc; color: #0f172a; }
-    
-    /* Standard KPI Box */
-    div[data-testid="stMetric"] {
-        background-color: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-        border-radius: 8px !important;
-        padding: 12px 14px !important;
-        text-align: center !important;
-        min-height: 90px !important;
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #475569 !important;
-        font-weight: 600 !important;
-        font-size: 0.8rem !important;
-    }
-    div[data-testid="stMetricValue"] {
-        color: #0f172a !important;
-        font-weight: 700 !important;
-        font-size: 1.25rem !important;
-    }
-
-    /* Highlighted Red Outer Border & Background for Pending & Updated KPIs */
-    .metric-red-box div[data-testid="stMetric"] {
-        border: 2px solid #dc2626 !important;
-        background-color: #fef2f2 !important;
-    }
-    .metric-red-box div[data-testid="stMetricValue"] { 
-        color: #dc2626 !important; 
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 # Dashboard Title
 st.title("🚛 Transhipment Failure Report")
 st.markdown("---")
@@ -96,41 +59,14 @@ if uploaded_file is not None:
     df['Aging_Bucket'] = df['HH_Numeric'].apply(get_bucket_label)
 
     # -------------------------------------------------------------
-    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (PERFECTLY ALIGNED SINGLE LINE)
+    # LAYOUT TRICK: Reserve space for KPIs on top, but calculate them AFTER filters
     # -------------------------------------------------------------
-    st.markdown("### 📊 Operational Summary KPIs")
-    
-    tot_cn = len(df)
-    tot_pkt = int(df['PKT_Numeric'].sum())
-    tot_wt_raw = df['WT_Numeric'].sum()
-    
-    # Weight Format with explicit 'TON'
-    formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} TON" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} TON"
-
-    pending_cnt = len(df[df['Reason_Status'] == 'Pending'])
-    updated_cnt = len(df[df['Reason_Status'] == 'Updated'])
-
-    # Single Row 5 Columns Allocation
-    k1, k2, k3, k4, k5 = st.columns(5)
-
-    k1.metric("Total CN (Unique)", f"{tot_cn:,}")
-    k2.metric("Total PKT Count", f"{tot_pkt:,}")
-    k3.metric("Total Weight", formatted_wt)
-
-    with k4:
-        st.markdown('<div class="metric-red-box">', unsafe_allow_html=True)
-        st.metric("Pending Reason", f"{pending_cnt:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with k5:
-        st.markdown('<div class="metric-red-box">', unsafe_allow_html=True)
-        st.metric("Reason Updated", f"{updated_cnt:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
+    kpi_container = st.container()
 
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 2. FILTERS PANEL
+    # 2. FILTERS PANEL (Placing this before KPI calculations in logic)
     # -------------------------------------------------------------
     st.markdown("### 🔍 Filters Panel")
     f1, f2, f3 = st.columns(3)
@@ -157,7 +93,7 @@ if uploaded_file is not None:
             default=bucket_options
         )
 
-    # Apply Filters to Master Dataset
+    # APPLY FILTERS TO MASTER DATASET FIRST
     df_filtered = df.copy()
     if selected_destinations:
         df_filtered = df_filtered[df_filtered[dest_col].astype(str).isin(selected_destinations)]
@@ -169,6 +105,50 @@ if uploaded_file is not None:
 
     if selected_buckets:
         df_filtered = df_filtered[df_filtered['Aging_Bucket'].isin(selected_buckets)]
+
+    # -------------------------------------------------------------
+    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (Now rendering inside top container with Filtered Data)
+    # -------------------------------------------------------------
+    with kpi_container:
+        st.markdown("### 📊 Operational Summary KPIs")
+        
+        # Calculations based on df_filtered (DYNAMIC)
+        tot_cn = len(df_filtered)
+        tot_pkt = int(df_filtered['PKT_Numeric'].sum())
+        tot_wt_raw = df_filtered['WT_Numeric'].sum()
+        
+        # Weight Format with explicit 'TON'
+        formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} TON" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} TON"
+
+        pending_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Pending'])
+        updated_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Updated'])
+
+        # Custom HTML to strictly enforce single line layout and Red borders
+        custom_kpi_html = f"""
+        <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 10px;">
+            <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                <div style="color: #475569; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px;">Total CN (Unique)</div>
+                <div style="color: #0f172a; font-weight: 700; font-size: 1.35rem;">{tot_cn:,}</div>
+            </div>
+            <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                <div style="color: #475569; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px;">Total PKT Count</div>
+                <div style="color: #0f172a; font-weight: 700; font-size: 1.35rem;">{tot_pkt:,}</div>
+            </div>
+            <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                <div style="color: #475569; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px;">Total Weight</div>
+                <div style="color: #0f172a; font-weight: 700; font-size: 1.35rem;">{formatted_wt}</div>
+            </div>
+            <div style="flex: 1; background-color: #fef2f2; border: 2px solid #dc2626; border-radius: 8px; padding: 15px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                <div style="color: #475569; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px;">Pending Reason</div>
+                <div style="color: #dc2626; font-weight: 700; font-size: 1.35rem;">{pending_cnt:,}</div>
+            </div>
+            <div style="flex: 1; background-color: #fef2f2; border: 2px solid #dc2626; border-radius: 8px; padding: 15px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                <div style="color: #475569; font-weight: 600; font-size: 0.85rem; margin-bottom: 5px;">Reason Updated</div>
+                <div style="color: #dc2626; font-weight: 700; font-size: 1.35rem;">{updated_cnt:,}</div>
+            </div>
+        </div>
+        """
+        st.markdown(custom_kpi_html, unsafe_allow_html=True)
 
     st.markdown("---")
 

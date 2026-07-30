@@ -9,36 +9,40 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (Single-line KPIs, Clean Alignment, Highlighted Red Borders)
+# Custom Styling (Strict Single-Line Alignment & Highlighted Red KPI Boxes)
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
+    /* Standard KPI Box */
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
         border-radius: 8px !important;
-        padding: 10px 14px !important;
+        padding: 12px 14px !important;
         text-align: center !important;
+        min-height: 90px !important;
     }
     div[data-testid="stMetricLabel"] {
         color: #475569 !important;
         font-weight: 600 !important;
-        font-size: 0.82rem !important;
+        font-size: 0.8rem !important;
     }
     div[data-testid="stMetricValue"] {
         color: #0f172a !important;
         font-weight: 700 !important;
-        font-size: 1.3rem !important;
+        font-size: 1.25rem !important;
     }
 
-    /* Red Outer Border for Last Two Reason Status KPI Boxes */
-    .metric-red-border div[data-testid="stMetric"] {
-        border: 2px solid #ef4444 !important;
+    /* Highlighted Red Outer Border & Background for Pending & Updated KPIs */
+    .metric-red-box div[data-testid="stMetric"] {
+        border: 2px solid #dc2626 !important;
         background-color: #fef2f2 !important;
     }
-    .metric-red-border div[data-testid="stMetricValue"] { color: #dc2626 !important; }
+    .metric-red-box div[data-testid="stMetricValue"] { 
+        color: #dc2626 !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -92,39 +96,41 @@ if uploaded_file is not None:
     df['Aging_Bucket'] = df['HH_Numeric'].apply(get_bucket_label)
 
     # -------------------------------------------------------------
-    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (SINGLE ROW ALIGNED)
+    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (PERFECTLY ALIGNED SINGLE LINE)
     # -------------------------------------------------------------
     st.markdown("### 📊 Operational Summary KPIs")
     
     tot_cn = len(df)
     tot_pkt = int(df['PKT_Numeric'].sum())
     tot_wt_raw = df['WT_Numeric'].sum()
-    formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} T" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} T"
+    
+    # Weight Format with explicit 'TON'
+    formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} TON" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} TON"
 
     pending_cnt = len(df[df['Reason_Status'] == 'Pending'])
     updated_cnt = len(df[df['Reason_Status'] == 'Updated'])
 
-    # Explicit Equal Column Width Ratios for Perfect Line Alignment
-    k1, k2, k3, k4, k5 = st.columns([1, 1, 1, 1, 1])
+    # Single Row 5 Columns Allocation
+    k1, k2, k3, k4, k5 = st.columns(5)
 
     k1.metric("Total CN (Unique)", f"{tot_cn:,}")
     k2.metric("Total PKT Count", f"{tot_pkt:,}")
     k3.metric("Total Weight", formatted_wt)
 
     with k4:
-        st.markdown('<div class="metric-red-border">', unsafe_allow_html=True)
+        st.markdown('<div class="metric-red-box">', unsafe_allow_html=True)
         st.metric("Pending Reason", f"{pending_cnt:,}")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with k5:
-        st.markdown('<div class="metric-red-border">', unsafe_allow_html=True)
+        st.markdown('<div class="metric-red-box">', unsafe_allow_html=True)
         st.metric("Reason Updated", f"{updated_cnt:,}")
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 2. FILTERS PANEL (MULTIPLE SELECTION FOR DESTINATIONS)
+    # 2. FILTERS PANEL
     # -------------------------------------------------------------
     st.markdown("### 🔍 Filters Panel")
     f1, f2, f3 = st.columns(3)
@@ -134,7 +140,7 @@ if uploaded_file is not None:
         selected_destinations = st.multiselect(
             "📍 Filter By Destination Name (Col H):",
             options=dest_list,
-            default=[] # Default empty means all selected
+            default=[]
         )
 
     with f2:
@@ -176,7 +182,7 @@ if uploaded_file is not None:
         summary_cols = {
             'CN Count': (cn_col, 'count'),
             'Total PKT': ('PKT_Numeric', 'sum'),
-            'Total Weight (T)': ('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
+            'Total Weight (TON)': ('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
             'Max Aging (HH)': ('HH_Numeric', 'max')
         }
         

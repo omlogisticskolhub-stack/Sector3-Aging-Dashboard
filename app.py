@@ -48,17 +48,18 @@ if uploaded_file is not None:
         df_raw = pd.read_excel(uploaded_file)
 
     # -------------------------------------------------------------
-    # COLUMN DETECTION & COLUMN H (DESTINATION NAME) SPECIFIC LOGIC
+    # COLUMN DETECTION
     # -------------------------------------------------------------
     cn_col = next((c for c in df_raw.columns if 'CN' in c.upper() or 'DOCKET' in c.upper()), df_raw.columns[0])
     
-    # Destination Name: Direct Column H check or fallback to Name/Dest keywords
+    # Destination Name: Column H check (Index 7) or fallback
     if len(df_raw.columns) >= 8:
-        dest_col = df_raw.columns[7] # Column H (0-indexed 7th)
+        dest_col = df_raw.columns[7]
     else:
         dest_col = next((c for c in df_raw.columns if 'DEST' in c.upper() or 'NAME' in c.upper() or 'TODIST' in c.upper()), df_raw.columns[1])
 
-    pkg_col = next((c for c in df_raw.columns if 'PKG' in c.upper() or 'BOX' in c.upper()), None)
+    # PKT / Packages Column Detection
+    pkt_col = next((c for c in df_raw.columns if 'PKT' in c.upper() or 'PKG' in c.upper() or 'BOX' in c.upper() or 'PACKAGE' in c.upper()), None)
     wt_col = next((c for c in df_raw.columns if 'TON' in c.upper() or 'WEIGHT' in c.upper() or 'WT' in c.upper()), None)
     aging_col = next((c for c in df_raw.columns if c.strip().upper() == 'HH' or 'HH' in c.upper() or 'AGING' in c.upper()), None)
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
@@ -68,17 +69,17 @@ if uploaded_file is not None:
     df = df_raw.drop_duplicates(subset=[cn_col]).copy()
     
     df['HH_Numeric'] = pd.to_numeric(df[aging_col], errors='coerce').fillna(0) if aging_col else 0
-    df['PKG_Numeric'] = pd.to_numeric(df[pkg_col], errors='coerce').fillna(0) if pkg_col else 0
+    df['PKT_Numeric'] = pd.to_numeric(df[pkt_col], errors='coerce').fillna(0) if pkt_col else 0
     df['WT_Numeric'] = pd.to_numeric(df[wt_col], errors='coerce').fillna(0) if wt_col else 0
 
-    # Reason Status Column Setup
+    # Reason Status Setup
     if reason_col:
         df['Reason_Status'] = df[reason_col].apply(lambda x: "Pending" if pd.isna(x) or str(x).strip() == "" or str(x).strip().upper() in ["NAN", "NONE"] else "Updated")
     else:
         df['Reason_Status'] = "Pending"
 
     # -------------------------------------------------------------
-    # 1. TOP OPERATIONAL SUMMARY KPIS
+    # 1. TOP OPERATIONAL SUMMARY KPIS (PKT ADDED)
     # -------------------------------------------------------------
     st.markdown("### 📊 Operational Summary KPIs")
     k1, k2, k3, k4, k5, k6 = st.columns(6)
@@ -91,7 +92,8 @@ if uploaded_file is not None:
     k3.metric("Pending Reason", f"{pending_cnt:,}")
     k4.metric("Reason Updated", f"{updated_cnt:,}")
     
-    k5.metric("Total Packages", f"{int(df['PKG_Numeric'].sum()):,}")
+    # PKT Count KPI
+    k5.metric("Total PKT (Packages)", f"{int(df['PKT_Numeric'].sum()):,}")
     k6.metric("Total Weight (Tons)", f"{round(df['WT_Numeric'].sum(), 2):,}")
 
     st.markdown("---")
@@ -129,7 +131,7 @@ if uploaded_file is not None:
         st.markdown("### 📍 Destination Wise Pending Summary")
         summary_cols = {
             'CN Count': (cn_col, 'count'),
-            'Total PKG': ('PKG_Numeric', 'sum'),
+            'Total PKT': ('PKT_Numeric', 'sum'),
             'Total Weight (Tons)': ('WT_Numeric', 'sum'),
             'Max Aging (HH)': ('HH_Numeric', 'max')
         }
@@ -177,7 +179,7 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 4. FILTERED CN MASTER DETAILS (ALL CNs INCLUDED)
+    # 4. FILTERED CN MASTER DETAILS
     # -------------------------------------------------------------
     st.markdown("### 📋 Filtered CN Master Details")
     
@@ -191,7 +193,7 @@ if uploaded_file is not None:
 
     # Ordered Display Columns
     display_cols = [cn_col, dest_col]
-    if pkg_col: display_cols.append(pkg_col)
+    if pkt_col: display_cols.append(pkt_col)
     if wt_col: display_cols.append(wt_col)
     if reason_col: display_cols.append(reason_col)
     display_cols.append('Reason_Status')

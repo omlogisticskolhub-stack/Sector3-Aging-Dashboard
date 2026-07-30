@@ -9,12 +9,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (High Contrast, Centered KPIs & Colored Borders)
+# Custom Styling (Highlighted Red Borders for Pending/Updated KPIs & Clean Layout)
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
-    /* Base Metric Box */
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -27,7 +26,6 @@ st.markdown("""
         color: #475569 !important;
         font-weight: 600 !important;
         font-size: 0.85rem !important;
-        justify-content: center !alignment;
     }
     div[data-testid="stMetricValue"] {
         color: #0f172a !important;
@@ -35,19 +33,12 @@ st.markdown("""
         font-size: 1.35rem !important;
     }
 
-    /* Red Outer Border for Pending Reason */
-    .metric-pending div[data-testid="stMetric"] {
+    /* Red Outer Border for Pending and Updated Reason Metric Boxes */
+    .metric-red-border div[data-testid="stMetric"] {
         border: 2px solid #ef4444 !important;
         background-color: #fef2f2 !important;
     }
-    .metric-pending div[data-testid="stMetricValue"] { color: #dc2626 !important; }
-
-    /* Green Outer Border for Updated Reason */
-    .metric-updated div[data-testid="stMetric"] {
-        border: 2px solid #22c55e !important;
-        background-color: #f0fdf4 !important;
-    }
-    .metric-updated div[data-testid="stMetricValue"] { color: #16a34a !important; }
+    .metric-red-border div[data-testid="stMetricValue"] { color: #dc2626 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -91,23 +82,71 @@ if uploaded_file is not None:
     else:
         df['Reason_Status'] = "Pending"
 
+    # Aging Bucket Label Function
+    def get_bucket_label(hh):
+        if hh <= 24: return '0-24 Hrs'
+        elif hh <= 48: return '24-48 Hrs'
+        elif hh <= 72: return '48-72 Hrs'
+        else: return '72+ Hrs'
+
+    df['Aging_Bucket'] = df['HH_Numeric'].apply(get_bucket_label)
+
     # -------------------------------------------------------------
-    # FILTER CONTROLS (Top Filters applied FIRST)
+    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (NOW DISPLAYED AT THE TOP)
+    # -------------------------------------------------------------
+    st.markdown("### 📊 Operational Summary KPIs")
+    
+    tot_cn = len(df)
+    tot_pkt = int(df['PKT_Numeric'].sum())
+    tot_wt_raw = df['WT_Numeric'].sum()
+    formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} T" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} T"
+
+    pending_cnt = len(df[df['Reason_Status'] == 'Pending'])
+    updated_cnt = len(df[df['Reason_Status'] == 'Updated'])
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+
+    k1.metric("Total CN (Unique)", f"{tot_cn:,}")
+    k2.metric("Total PKT Count", f"{tot_pkt:,}")
+    k3.metric("Total Weight", formatted_wt)
+
+    with k4:
+        st.markdown('<div class="metric-red-border">', unsafe_allow_html=True)
+        st.metric("Pending Reason", f"{pending_cnt:,}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with k5:
+        st.markdown('<div class="metric-red-border">', unsafe_allow_html=True)
+        st.metric("Reason Updated", f"{updated_cnt:,}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # -------------------------------------------------------------
+    # 2. FILTERS PANEL (NOW PLACED BELOW THE KPIS)
     # -------------------------------------------------------------
     st.markdown("### 🔍 Filters Panel")
-    f_col1, f_col2 = st.columns([1, 1])
+    f1, f2, f3 = st.columns(3)
 
-    with f_col1:
+    with f1:
         dest_list = ["All Destinations"] + sorted(df[dest_col].dropna().astype(str).unique().tolist())
         selected_dest = st.selectbox("📍 Filter By Destination Name (Col H):", dest_list)
 
-    with f_col2:
+    with f2:
         status_filter = st.selectbox(
             "⚡ Filter By Reason Status:",
             options=["All Status", "Pending Reason Only", "Updated Reason Only"]
         )
 
-    # Master Data Filter Application
+    with f3:
+        bucket_options = ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs']
+        selected_buckets = st.multiselect(
+            "⏳ Filter By Aging Buckets:",
+            options=bucket_options,
+            default=bucket_options # Default selects all
+        )
+
+    # Apply Filters to Master Dataset
     df_filtered = df.copy()
     if selected_dest != "All Destinations":
         df_filtered = df_filtered[df_filtered[dest_col].astype(str) == selected_dest]
@@ -117,43 +156,13 @@ if uploaded_file is not None:
     elif status_filter == "Updated Reason Only":
         df_filtered = df_filtered[df_filtered['Reason_Status'] == "Updated"]
 
-    st.markdown("---")
-
-    # -------------------------------------------------------------
-    # 1. TOP 5 KPIS IN A SINGLE ROW (Fully Dynamic to Filters)
-    # -------------------------------------------------------------
-    st.markdown("### 📊 Operational Summary KPIs")
-    
-    k1, k2, k3, k4, k5 = st.columns(5)
-
-    # Calculate Filtered Values
-    tot_cn = len(df_filtered)
-    tot_pkt = int(df_filtered['PKT_Numeric'].sum())
-    
-    tot_wt_raw = df_filtered['WT_Numeric'].sum()
-    formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} T" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} T"
-
-    pending_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Pending'])
-    updated_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Updated'])
-
-    k1.metric("Total CN (Unique)", f"{tot_cn:,}")
-    k2.metric("Total PKT Count", f"{tot_pkt:,}")
-    k3.metric("Total Weight", formatted_wt)
-
-    with k4:
-        st.markdown('<div class="metric-pending">', unsafe_allow_html=True)
-        st.metric("Pending Reason", f"{pending_cnt:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with k5:
-        st.markdown('<div class="metric-updated">', unsafe_allow_html=True)
-        st.metric("Reason Updated", f"{updated_cnt:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
+    if selected_buckets:
+        df_filtered = df_filtered[df_filtered['Aging_Bucket'].isin(selected_buckets)]
 
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 2. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
+    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
     # -------------------------------------------------------------
     c_left, c_right = st.columns([1, 1])
 
@@ -178,10 +187,10 @@ if uploaded_file is not None:
     with c_right:
         st.markdown("### 📊 Aging Distribution Chart")
         
-        b_24 = len(df_filtered[(df_filtered['HH_Numeric'] >= 0) & (df_filtered['HH_Numeric'] <= 24)])
-        b_48 = len(df_filtered[(df_filtered['HH_Numeric'] > 24) & (df_filtered['HH_Numeric'] <= 48)])
-        b_72 = len(df_filtered[(df_filtered['HH_Numeric'] > 48) & (df_filtered['HH_Numeric'] <= 72)])
-        b_96 = len(df_filtered[df_filtered['HH_Numeric'] > 72])
+        b_24 = len(df_filtered[df_filtered['Aging_Bucket'] == '0-24 Hrs'])
+        b_48 = len(df_filtered[df_filtered['Aging_Bucket'] == '24-48 Hrs'])
+        b_72 = len(df_filtered[df_filtered['Aging_Bucket'] == '48-72 Hrs'])
+        b_96 = len(df_filtered[df_filtered['Aging_Bucket'] == '72+ Hrs'])
 
         aging_chart_data = pd.DataFrame({
             'Aging Bucket': ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs'],
@@ -212,18 +221,10 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 3. FILTERED MASTER DETAILS TABLE (Sequential S.No 1, 2, 3...)
+    # 4. FILTERED MASTER DETAILS TABLE (Sequential S.No 1, 2, 3...)
     # -------------------------------------------------------------
     st.markdown("### 📋 Filtered CN Master Details")
     
-    def get_bucket_label(hh):
-        if hh <= 24: return '0-24 Hrs'
-        elif hh <= 48: return '24-48 Hrs'
-        elif hh <= 72: return '48-72 Hrs'
-        else: return '72+ Hrs'
-
-    df_filtered['Aging_Bucket'] = df_filtered['HH_Numeric'].apply(get_bucket_label)
-
     display_cols = [cn_col, dest_col]
     if pkt_col: display_cols.append(pkt_col)
     if wt_col: display_cols.append(wt_col)
@@ -232,7 +233,6 @@ if uploaded_file is not None:
     if aging_col: display_cols.append(aging_col)
     display_cols.append('Aging_Bucket')
 
-    # Sequential Index Reset for Master Table
     master_view = df_filtered[display_cols].copy().reset_index(drop=True)
     master_view.index = master_view.index + 1
 

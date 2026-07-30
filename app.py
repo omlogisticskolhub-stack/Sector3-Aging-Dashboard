@@ -9,10 +9,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (High-Contrast Clean Light Mode)
+# Custom Styling (High Contrast + Highlighted KPI Boxes)
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
+    
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -30,6 +31,19 @@ st.markdown("""
         font-weight: 700 !important;
         font-size: 1.4rem !important;
     }
+
+    /* Highlighted Reason Status Boxes */
+    .metric-pending div[data-testid="stMetric"] {
+        border-left: 6px solid #ef4444 !important;
+        background-color: #fef2f2 !important;
+    }
+    .metric-pending div[data-testid="stMetricValue"] { color: #dc2626 !important; }
+
+    .metric-updated div[data-testid="stMetric"] {
+        border-left: 6px solid #22c55e !important;
+        background-color: #f0fdf4 !important;
+    }
+    .metric-updated div[data-testid="stMetricValue"] { color: #16a34a !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -58,14 +72,12 @@ if uploaded_file is not None:
     else:
         dest_col = next((c for c in df_raw.columns if 'DEST' in c.upper() or 'NAME' in c.upper() or 'TODIST' in c.upper()), df_raw.columns[1])
 
-    # PKT / Packages Column Detection
     pkt_col = next((c for c in df_raw.columns if 'PKT' in c.upper() or 'PKG' in c.upper() or 'BOX' in c.upper() or 'PACKAGE' in c.upper()), None)
     wt_col = next((c for c in df_raw.columns if 'TON' in c.upper() or 'WEIGHT' in c.upper() or 'WT' in c.upper()), None)
     aging_col = next((c for c in df_raw.columns if c.strip().upper() == 'HH' or 'HH' in c.upper() or 'AGING' in c.upper()), None)
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
 
-    # Clean CNs & Numeric Conversions
-    raw_total_cnt = len(df_raw)
+    # 1. DEDUPLICATION (UNIQUE CNs ONLY)
     df = df_raw.drop_duplicates(subset=[cn_col]).copy()
     
     df['HH_Numeric'] = pd.to_numeric(df[aging_col], errors='coerce').fillna(0) if aging_col else 0
@@ -78,66 +90,83 @@ if uploaded_file is not None:
     else:
         df['Reason_Status'] = "Pending"
 
+    # Weight Formatting Logic (Readable Ton Representation)
+    total_wt_raw = df['WT_Numeric'].sum()
+    if total_wt_raw > 1000:
+        formatted_wt = f"{round(total_wt_raw / 1000, 2):,} T" # Convert KG/LBS to Tons if raw values are large
+    else:
+        formatted_wt = f"{round(total_wt_raw, 2):,} T"
+
     # -------------------------------------------------------------
-    # 1. TOP OPERATIONAL SUMMARY KPIS (PKT ADDED)
+    # TOP OPERATIONAL KPIS + INTERACTIVE REASON FILTER
     # -------------------------------------------------------------
     st.markdown("### 📊 Operational Summary KPIs")
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
     
-    k1.metric("Total CNs", f"{raw_total_cnt:,}")
-    k2.metric("Total Unique CNs", f"{len(df):,}")
+    # Status Radio Selection in KPI Area
+    status_filter = st.radio(
+        "⚡ **Select View Filter:**",
+        options=["All CNs", "Pending Reason Only", "Updated Reason Only"],
+        horizontal=True
+    )
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+    
+    k1.metric("Total CN (Unique)", f"{len(df):,}")
+    k2.metric("Total PKT Count", f"{int(df['PKT_Numeric'].sum()):,}")
+    k3.metric("Total Weight", formatted_wt)
     
     pending_cnt = len(df[df['Reason_Status'] == 'Pending'])
     updated_cnt = len(df[df['Reason_Status'] == 'Updated'])
-    k3.metric("Pending Reason", f"{pending_cnt:,}")
-    k4.metric("Reason Updated", f"{updated_cnt:,}")
     
-    # PKT Count KPI
-    k5.metric("Total PKT (Packages)", f"{int(df['PKT_Numeric'].sum()):,}")
-    k6.metric("Total Weight (Tons)", f"{round(df['WT_Numeric'].sum(), 2):,}")
+    with k4:
+        st.markdown('<div class="metric-pending">', unsafe_allow_html=True)
+        st.metric("Pending Reason", f"{pending_cnt:,}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with k5:
+        st.markdown('<div class="metric-updated">', unsafe_allow_html=True)
+        st.metric("Reason Updated", f"{updated_cnt:,}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
+    # Apply Top Filter To Entire Dataset
+    df_filtered = df.copy()
+    if status_filter == "Pending Reason Only":
+        df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
+    elif status_filter == "Updated Reason Only":
+        df_filtered = df_filtered[df_filtered['Reason_Status'] == "Updated"]
+
     # -------------------------------------------------------------
-    # 2. FILTER PANEL
+    # DESTINATION FILTER PANEL (COMPACT / HALF WIDTH)
     # -------------------------------------------------------------
-    st.markdown("### 🔍 Filter Panel")
-    f_col1, f_col2 = st.columns([2, 1])
+    st.markdown("### 🔍 Destination Filter Panel")
+    f_col1, f_col2 = st.columns([1, 1])
 
     with f_col1:
-        dest_list = ["All Destinations"] + sorted(df[dest_col].dropna().astype(str).unique().tolist())
+        dest_list = ["All Destinations"] + sorted(df_filtered[dest_col].dropna().astype(str).unique().tolist())
         selected_dest = st.selectbox("📍 Filter By Destination Name (Col H):", dest_list)
 
-    with f_col2:
-        st.write("") # Spacing
-        filter_blank_only = st.checkbox("⚠️ Filter Only Pending/Blank Reasons", value=False)
-
-    # Filter Application
-    df_filtered = df.copy()
     if selected_dest != "All Destinations":
         df_filtered = df_filtered[df_filtered[dest_col].astype(str) == selected_dest]
-        
-    if filter_blank_only:
-        df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
 
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
+    # DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
     # -------------------------------------------------------------
     c_left, c_right = st.columns([1, 1])
 
     with c_left:
-        st.markdown("### 📍 Destination Wise Pending Summary")
+        st.markdown("### 📍 Destination Wise Summary")
         summary_cols = {
             'CN Count': (cn_col, 'count'),
             'Total PKT': ('PKT_Numeric', 'sum'),
-            'Total Weight (Tons)': ('WT_Numeric', 'sum'),
+            'Total Weight (T)': ('WT_Numeric', lambda x: round(x.sum() / (1000 if total_wt_raw > 1000 else 1), 2)),
             'Max Aging (HH)': ('HH_Numeric', 'max')
         }
         
         dest_summary = df_filtered.groupby(dest_col).agg(**summary_cols).reset_index()
-        dest_summary['Total Weight (Tons)'] = dest_summary['Total Weight (Tons)'].round(2)
         dest_summary = dest_summary.sort_values(by='CN Count', ascending=False)
         
         st.dataframe(dest_summary, height=360, use_container_width=True)
@@ -179,7 +208,7 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 4. FILTERED CN MASTER DETAILS
+    # FILTERED CN MASTER DETAILS
     # -------------------------------------------------------------
     st.markdown("### 📋 Filtered CN Master Details")
     

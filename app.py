@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (Highlighted Red Borders for Pending/Updated KPIs & Clean Layout)
+# Custom Styling (Single-line KPIs, Clean Alignment, Highlighted Red Borders)
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
@@ -25,15 +25,15 @@ st.markdown("""
     div[data-testid="stMetricLabel"] {
         color: #475569 !important;
         font-weight: 600 !important;
-        font-size: 0.85rem !important;
+        font-size: 0.82rem !important;
     }
     div[data-testid="stMetricValue"] {
         color: #0f172a !important;
         font-weight: 700 !important;
-        font-size: 1.35rem !important;
+        font-size: 1.3rem !important;
     }
 
-    /* Red Outer Border for Pending and Updated Reason Metric Boxes */
+    /* Red Outer Border for Last Two Reason Status KPI Boxes */
     .metric-red-border div[data-testid="stMetric"] {
         border: 2px solid #ef4444 !important;
         background-color: #fef2f2 !important;
@@ -92,7 +92,7 @@ if uploaded_file is not None:
     df['Aging_Bucket'] = df['HH_Numeric'].apply(get_bucket_label)
 
     # -------------------------------------------------------------
-    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (NOW DISPLAYED AT THE TOP)
+    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (SINGLE ROW ALIGNED)
     # -------------------------------------------------------------
     st.markdown("### 📊 Operational Summary KPIs")
     
@@ -104,7 +104,8 @@ if uploaded_file is not None:
     pending_cnt = len(df[df['Reason_Status'] == 'Pending'])
     updated_cnt = len(df[df['Reason_Status'] == 'Updated'])
 
-    k1, k2, k3, k4, k5 = st.columns(5)
+    # Explicit Equal Column Width Ratios for Perfect Line Alignment
+    k1, k2, k3, k4, k5 = st.columns([1, 1, 1, 1, 1])
 
     k1.metric("Total CN (Unique)", f"{tot_cn:,}")
     k2.metric("Total PKT Count", f"{tot_pkt:,}")
@@ -123,14 +124,18 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # 2. FILTERS PANEL (NOW PLACED BELOW THE KPIS)
+    # 2. FILTERS PANEL (MULTIPLE SELECTION FOR DESTINATIONS)
     # -------------------------------------------------------------
     st.markdown("### 🔍 Filters Panel")
     f1, f2, f3 = st.columns(3)
 
     with f1:
-        dest_list = ["All Destinations"] + sorted(df[dest_col].dropna().astype(str).unique().tolist())
-        selected_dest = st.selectbox("📍 Filter By Destination Name (Col H):", dest_list)
+        dest_list = sorted(df[dest_col].dropna().astype(str).unique().tolist())
+        selected_destinations = st.multiselect(
+            "📍 Filter By Destination Name (Col H):",
+            options=dest_list,
+            default=[] # Default empty means all selected
+        )
 
     with f2:
         status_filter = st.selectbox(
@@ -143,13 +148,13 @@ if uploaded_file is not None:
         selected_buckets = st.multiselect(
             "⏳ Filter By Aging Buckets:",
             options=bucket_options,
-            default=bucket_options # Default selects all
+            default=bucket_options
         )
 
     # Apply Filters to Master Dataset
     df_filtered = df.copy()
-    if selected_dest != "All Destinations":
-        df_filtered = df_filtered[df_filtered[dest_col].astype(str) == selected_dest]
+    if selected_destinations:
+        df_filtered = df_filtered[df_filtered[dest_col].astype(str).isin(selected_destinations)]
 
     if status_filter == "Pending Reason Only":
         df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
@@ -178,7 +183,6 @@ if uploaded_file is not None:
         dest_summary = df_filtered.groupby(dest_col).agg(**summary_cols).reset_index()
         dest_summary = dest_summary.sort_values(by='CN Count', ascending=False)
         
-        # Reset Index for Sequential Serial Number (1, 2, 3...)
         dest_summary = dest_summary.reset_index(drop=True)
         dest_summary.index = dest_summary.index + 1
         

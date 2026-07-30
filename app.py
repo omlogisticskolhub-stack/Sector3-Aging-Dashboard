@@ -9,49 +9,53 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (High Contrast + Highlighted KPI Boxes)
+# Custom Styling (High Contrast, Centered KPIs & Colored Borders)
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
+    /* Base Metric Box */
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
         border-radius: 8px !important;
-        padding: 12px 16px !important;
+        padding: 10px 14px !important;
+        text-align: center !important;
     }
     div[data-testid="stMetricLabel"] {
         color: #475569 !important;
         font-weight: 600 !important;
-        font-size: 0.88rem !important;
+        font-size: 0.85rem !important;
+        justify-content: center !alignment;
     }
     div[data-testid="stMetricValue"] {
         color: #0f172a !important;
         font-weight: 700 !important;
-        font-size: 1.4rem !important;
+        font-size: 1.35rem !important;
     }
 
-    /* Highlighted Reason Status Boxes */
+    /* Red Outer Border for Pending Reason */
     .metric-pending div[data-testid="stMetric"] {
-        border-left: 6px solid #ef4444 !important;
+        border: 2px solid #ef4444 !important;
         background-color: #fef2f2 !important;
     }
     .metric-pending div[data-testid="stMetricValue"] { color: #dc2626 !important; }
 
+    /* Green Outer Border for Updated Reason */
     .metric-updated div[data-testid="stMetric"] {
-        border-left: 6px solid #22c55e !important;
+        border: 2px solid #22c55e !important;
         background-color: #f0fdf4 !important;
     }
     .metric-updated div[data-testid="stMetricValue"] { color: #16a34a !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# Main Title
+# Dashboard Title
 st.title("🚛 Transhipment Failure Report")
 st.markdown("---")
 
-# File Uploader
+# File Upload
 uploaded_file = st.file_uploader("📥 Upload Transhipment Operational File (Excel / CSV)", type=["xlsx", "csv"])
 
 if uploaded_file is not None:
@@ -61,14 +65,11 @@ if uploaded_file is not None:
     else:
         df_raw = pd.read_excel(uploaded_file)
 
-    # -------------------------------------------------------------
-    # COLUMN DETECTION
-    # -------------------------------------------------------------
+    # Auto Detect Columns
     cn_col = next((c for c in df_raw.columns if 'CN' in c.upper() or 'DOCKET' in c.upper()), df_raw.columns[0])
     
-    # Destination Name: Column H check (Index 7) or fallback
     if len(df_raw.columns) >= 8:
-        dest_col = df_raw.columns[7]
+        dest_col = df_raw.columns[7] # Col H
     else:
         dest_col = next((c for c in df_raw.columns if 'DEST' in c.upper() or 'NAME' in c.upper() or 'TODIST' in c.upper()), df_raw.columns[1])
 
@@ -77,47 +78,68 @@ if uploaded_file is not None:
     aging_col = next((c for c in df_raw.columns if c.strip().upper() == 'HH' or 'HH' in c.upper() or 'AGING' in c.upper()), None)
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
 
-    # 1. DEDUPLICATION (UNIQUE CNs ONLY)
+    # 1. Deduplication (Unique CNs)
     df = df_raw.drop_duplicates(subset=[cn_col]).copy()
     
     df['HH_Numeric'] = pd.to_numeric(df[aging_col], errors='coerce').fillna(0) if aging_col else 0
     df['PKT_Numeric'] = pd.to_numeric(df[pkt_col], errors='coerce').fillna(0) if pkt_col else 0
     df['WT_Numeric'] = pd.to_numeric(df[wt_col], errors='coerce').fillna(0) if wt_col else 0
 
-    # Reason Status Setup
+    # Reason Status Column
     if reason_col:
         df['Reason_Status'] = df[reason_col].apply(lambda x: "Pending" if pd.isna(x) or str(x).strip() == "" or str(x).strip().upper() in ["NAN", "NONE"] else "Updated")
     else:
         df['Reason_Status'] = "Pending"
 
-    # Weight Formatting Logic (Readable Ton Representation)
-    total_wt_raw = df['WT_Numeric'].sum()
-    if total_wt_raw > 1000:
-        formatted_wt = f"{round(total_wt_raw / 1000, 2):,} T" # Convert KG/LBS to Tons if raw values are large
-    else:
-        formatted_wt = f"{round(total_wt_raw, 2):,} T"
+    # -------------------------------------------------------------
+    # FILTER CONTROLS (Top Filters applied FIRST)
+    # -------------------------------------------------------------
+    st.markdown("### 🔍 Filters Panel")
+    f_col1, f_col2 = st.columns([1, 1])
+
+    with f_col1:
+        dest_list = ["All Destinations"] + sorted(df[dest_col].dropna().astype(str).unique().tolist())
+        selected_dest = st.selectbox("📍 Filter By Destination Name (Col H):", dest_list)
+
+    with f_col2:
+        status_filter = st.selectbox(
+            "⚡ Filter By Reason Status:",
+            options=["All Status", "Pending Reason Only", "Updated Reason Only"]
+        )
+
+    # Master Data Filter Application
+    df_filtered = df.copy()
+    if selected_dest != "All Destinations":
+        df_filtered = df_filtered[df_filtered[dest_col].astype(str) == selected_dest]
+
+    if status_filter == "Pending Reason Only":
+        df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
+    elif status_filter == "Updated Reason Only":
+        df_filtered = df_filtered[df_filtered['Reason_Status'] == "Updated"]
+
+    st.markdown("---")
 
     # -------------------------------------------------------------
-    # TOP OPERATIONAL KPIS + INTERACTIVE REASON FILTER
+    # 1. TOP 5 KPIS IN A SINGLE ROW (Fully Dynamic to Filters)
     # -------------------------------------------------------------
     st.markdown("### 📊 Operational Summary KPIs")
     
-    # Status Radio Selection in KPI Area
-    status_filter = st.radio(
-        "⚡ **Select View Filter:**",
-        options=["All CNs", "Pending Reason Only", "Updated Reason Only"],
-        horizontal=True
-    )
-
     k1, k2, k3, k4, k5 = st.columns(5)
+
+    # Calculate Filtered Values
+    tot_cn = len(df_filtered)
+    tot_pkt = int(df_filtered['PKT_Numeric'].sum())
     
-    k1.metric("Total CN (Unique)", f"{len(df):,}")
-    k2.metric("Total PKT Count", f"{int(df['PKT_Numeric'].sum()):,}")
+    tot_wt_raw = df_filtered['WT_Numeric'].sum()
+    formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} T" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} T"
+
+    pending_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Pending'])
+    updated_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Updated'])
+
+    k1.metric("Total CN (Unique)", f"{tot_cn:,}")
+    k2.metric("Total PKT Count", f"{tot_pkt:,}")
     k3.metric("Total Weight", formatted_wt)
-    
-    pending_cnt = len(df[df['Reason_Status'] == 'Pending'])
-    updated_cnt = len(df[df['Reason_Status'] == 'Updated'])
-    
+
     with k4:
         st.markdown('<div class="metric-pending">', unsafe_allow_html=True)
         st.metric("Pending Reason", f"{pending_cnt:,}")
@@ -130,30 +152,8 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
-    # Apply Top Filter To Entire Dataset
-    df_filtered = df.copy()
-    if status_filter == "Pending Reason Only":
-        df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
-    elif status_filter == "Updated Reason Only":
-        df_filtered = df_filtered[df_filtered['Reason_Status'] == "Updated"]
-
     # -------------------------------------------------------------
-    # DESTINATION FILTER PANEL (COMPACT / HALF WIDTH)
-    # -------------------------------------------------------------
-    st.markdown("### 🔍 Destination Filter Panel")
-    f_col1, f_col2 = st.columns([1, 1])
-
-    with f_col1:
-        dest_list = ["All Destinations"] + sorted(df_filtered[dest_col].dropna().astype(str).unique().tolist())
-        selected_dest = st.selectbox("📍 Filter By Destination Name (Col H):", dest_list)
-
-    if selected_dest != "All Destinations":
-        df_filtered = df_filtered[df_filtered[dest_col].astype(str) == selected_dest]
-
-    st.markdown("---")
-
-    # -------------------------------------------------------------
-    # DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
+    # 2. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
     # -------------------------------------------------------------
     c_left, c_right = st.columns([1, 1])
 
@@ -162,12 +162,16 @@ if uploaded_file is not None:
         summary_cols = {
             'CN Count': (cn_col, 'count'),
             'Total PKT': ('PKT_Numeric', 'sum'),
-            'Total Weight (T)': ('WT_Numeric', lambda x: round(x.sum() / (1000 if total_wt_raw > 1000 else 1), 2)),
+            'Total Weight (T)': ('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
             'Max Aging (HH)': ('HH_Numeric', 'max')
         }
         
         dest_summary = df_filtered.groupby(dest_col).agg(**summary_cols).reset_index()
         dest_summary = dest_summary.sort_values(by='CN Count', ascending=False)
+        
+        # Reset Index for Sequential Serial Number (1, 2, 3...)
+        dest_summary = dest_summary.reset_index(drop=True)
+        dest_summary.index = dest_summary.index + 1
         
         st.dataframe(dest_summary, height=360, use_container_width=True)
 
@@ -208,7 +212,7 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # -------------------------------------------------------------
-    # FILTERED CN MASTER DETAILS
+    # 3. FILTERED MASTER DETAILS TABLE (Sequential S.No 1, 2, 3...)
     # -------------------------------------------------------------
     st.markdown("### 📋 Filtered CN Master Details")
     
@@ -220,7 +224,6 @@ if uploaded_file is not None:
 
     df_filtered['Aging_Bucket'] = df_filtered['HH_Numeric'].apply(get_bucket_label)
 
-    # Ordered Display Columns
     display_cols = [cn_col, dest_col]
     if pkt_col: display_cols.append(pkt_col)
     if wt_col: display_cols.append(wt_col)
@@ -229,7 +232,11 @@ if uploaded_file is not None:
     if aging_col: display_cols.append(aging_col)
     display_cols.append('Aging_Bucket')
 
-    st.dataframe(df_filtered[display_cols], height=380, use_container_width=True)
+    # Sequential Index Reset for Master Table
+    master_view = df_filtered[display_cols].copy().reset_index(drop=True)
+    master_view.index = master_view.index + 1
+
+    st.dataframe(master_view, height=380, use_container_width=True)
 
 else:
     st.info("💡 Kripya **Transhipment Failure Report** Excel/CSV file upload karein analysis ke liye.")

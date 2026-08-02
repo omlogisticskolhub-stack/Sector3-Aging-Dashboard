@@ -13,9 +13,8 @@ st.set_page_config(
 # 🔒 PASSWORD PROTECTION SYSTEM
 # ==========================================
 def check_password():
-    """Returns `True` if the user had the correct password."""
+    """Returns True if the user had the correct password."""
     def password_entered():
-        # 👇 आपका नया पासवर्ड यहां सेट कर दिया गया है 👇
         if st.session_state["password"] == "Dhiraj@01072026":
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # Security ke liye session se hata diya
@@ -41,18 +40,16 @@ def check_password():
         
     return False
 
-# Agar password verify nahi hua, toh code yahin ruk jayega (aage ka dashboard load nahi hoga)
+# Agar password verify nahi hua, toh code yahin ruk jayega
 if not check_password():
     st.stop()
 # ==========================================
 
-
-# Custom Styling (Strict Single-Line Alignment & Highlighted Red KPI Boxes)
+# Custom Styling
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
-    /* Standard KPI Box */
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -73,7 +70,6 @@ st.markdown("""
         font-size: 1.25rem !important;
     }
 
-    /* Highlighted Red Outer Border & Background for Pending & Updated KPIs */
     .metric-red-box div[data-testid="stMetric"] {
         border: 2px solid #dc2626 !important;
         background-color: #fef2f2 !important;
@@ -133,16 +129,11 @@ if uploaded_file is not None:
 
     df['Aging_Bucket'] = df['HH_Numeric'].apply(get_bucket_label)
 
-    # -------------------------------------------------------------
-    # LAYOUT TRICK: Reserve space for KPIs on top, but calculate them AFTER filters
-    # -------------------------------------------------------------
+    # Layout Container for KPIs
     kpi_container = st.container()
-
     st.markdown("---")
 
-    # -------------------------------------------------------------
-    # 2. FILTERS PANEL (Placing this before KPI calculations in logic)
-    # -------------------------------------------------------------
+    # 2. FILTERS PANEL
     st.markdown("### 🔍 Filters Panel")
     f1, f2, f3 = st.columns(3)
 
@@ -168,7 +159,7 @@ if uploaded_file is not None:
             default=bucket_options
         )
 
-    # APPLY FILTERS TO MASTER DATASET FIRST
+    # APPLY FILTERS
     df_filtered = df.copy()
     if selected_destinations:
         df_filtered = df_filtered[df_filtered[dest_col].astype(str).isin(selected_destinations)]
@@ -181,24 +172,19 @@ if uploaded_file is not None:
     if selected_buckets:
         df_filtered = df_filtered[df_filtered['Aging_Bucket'].isin(selected_buckets)]
 
-    # -------------------------------------------------------------
-    # 1. TOP 5 OPERATIONAL SUMMARY KPIS (Now rendering inside top container with Filtered Data)
-    # -------------------------------------------------------------
+    # 1. TOP 5 OPERATIONAL SUMMARY KPIS
     with kpi_container:
         st.markdown("### 📊 Operational Summary KPIs")
         
-        # Calculations based on df_filtered (DYNAMIC)
         tot_cn = len(df_filtered)
         tot_pkt = int(df_filtered['PKT_Numeric'].sum())
         tot_wt_raw = df_filtered['WT_Numeric'].sum()
         
-        # Weight Format with explicit 'TON'
         formatted_wt = f"{round(tot_wt_raw / 1000, 2):,} TON" if tot_wt_raw > 1000 else f"{round(tot_wt_raw, 2):,} TON"
 
         pending_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Pending'])
         updated_cnt = len(df_filtered[df_filtered['Reason_Status'] == 'Updated'])
 
-        # Custom HTML to strictly enforce single line layout and Red borders
         custom_kpi_html = f"""
         <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 10px;">
             <div style="flex: 1; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
@@ -227,9 +213,7 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
-    # -------------------------------------------------------------
     # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
-    # -------------------------------------------------------------
     c_left, c_right = st.columns([1, 1])
 
     with c_left:
@@ -243,7 +227,6 @@ if uploaded_file is not None:
         
         dest_summary = df_filtered.groupby(dest_col).agg(**summary_cols).reset_index()
         dest_summary = dest_summary.sort_values(by='CN Count', ascending=False)
-        
         dest_summary = dest_summary.reset_index(drop=True)
         dest_summary.index = dest_summary.index + 1
         
@@ -285,9 +268,7 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
-    # -------------------------------------------------------------
-    # 4. FILTERED MASTER DETAILS TABLE (Sequential S.No 1, 2, 3...)
-    # -------------------------------------------------------------
+    # 4. FILTERED MASTER DETAILS TABLE
     st.markdown("### 📋 Filtered CN Master Details")
     
     display_cols = [cn_col, dest_col]

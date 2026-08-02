@@ -9,6 +9,81 @@ st.set_page_config(
     layout="wide"
 )
 
+# ==========================================
+# 🔒 PASSWORD PROTECTION SYSTEM
+# ==========================================
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    def password_entered():
+        # 👇 आपका नया पासवर्ड यहां सेट कर दिया गया है 👇
+        if st.session_state["password"] == "Dhiraj@01072026":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Security ke liye session se hata diya
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Login Screen Design
+    st.title("🔒 Restricted Access")
+    st.markdown("This dashboard is highly secured. Please enter the password to continue.")
+    
+    st.text_input(
+        "Enter Password:", 
+        type="password", 
+        on_change=password_entered, 
+        key="password"
+    )
+    
+    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+        st.error("❌ Incorrect Password. Access Denied!")
+        
+    return False
+
+# Agar password verify nahi hua, toh code yahin ruk jayega (aage ka dashboard load nahi hoga)
+if not check_password():
+    st.stop()
+# ==========================================
+
+
+# Custom Styling (Strict Single-Line Alignment & Highlighted Red KPI Boxes)
+st.markdown("""
+    <style>
+    .stApp { background-color: #f8fafc; color: #0f172a; }
+    
+    /* Standard KPI Box */
+    div[data-testid="stMetric"] {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+        border-radius: 8px !important;
+        padding: 12px 14px !important;
+        text-align: center !important;
+        min-height: 90px !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #475569 !important;
+        font-weight: 600 !important;
+        font-size: 0.8rem !important;
+    }
+    div[data-testid="stMetricValue"] {
+        color: #0f172a !important;
+        font-weight: 700 !important;
+        font-size: 1.25rem !important;
+    }
+
+    /* Highlighted Red Outer Border & Background for Pending & Updated KPIs */
+    .metric-red-box div[data-testid="stMetric"] {
+        border: 2px solid #dc2626 !important;
+        background-color: #fef2f2 !important;
+    }
+    .metric-red-box div[data-testid="stMetricValue"] { 
+        color: #dc2626 !important; 
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Dashboard Title
 st.title("🚛 Transhipment Failure Report")
 st.markdown("---")

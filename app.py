@@ -17,14 +17,13 @@ def check_password():
     def password_entered():
         if st.session_state["password"] == "Dhiraj@01072026":
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Security ke liye session se hata diya
+            del st.session_state["password"]  
         else:
             st.session_state["password_correct"] = False
 
     if st.session_state.get("password_correct", False):
         return True
 
-    # Login Screen Design
     st.title("🔒 Restricted Access")
     st.markdown("This dashboard is highly secured. Please enter the password to continue.")
     
@@ -40,7 +39,6 @@ def check_password():
         
     return False
 
-# Agar password verify nahi hua, toh code yahin ruk jayega
 if not check_password():
     st.stop()
 # ==========================================
@@ -100,7 +98,7 @@ if uploaded_file is not None:
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
     
     # Auto Detect CEE Column (Col O: CEE_NAME)
-    cee_col = next((c for c in df_raw.columns if c.strip().upper() == 'CEE_NAME' or 'CEE' in c.upper() or 'CE' in c.upper()), None)
+    cee_col = next((c for c in df_raw.columns if c.strip().upper() == 'CEE_NAME' or 'CEE' in c.upper() or 'CE' in c.upper()), 'CEE_NAME')
 
     # 1. Deduplication (Unique CNs)
     df = df_raw.drop_duplicates(subset=[cn_col]).copy()
@@ -141,16 +139,15 @@ if uploaded_file is not None:
         )
 
     with f2:
-        if cee_col:
+        if cee_col in df.columns:
             cee_list = sorted(df[cee_col].dropna().astype(str).unique().tolist())
             selected_cee = st.multiselect(
-                "🏢 Filter By CEE Wise:",
+                "🏢 Filter By Customer Name (CEE):",
                 options=cee_list,
                 default=[]
             )
         else:
             selected_cee = []
-            st.info("CEE column not found")
 
     with f3:
         status_filter = st.selectbox(
@@ -171,7 +168,7 @@ if uploaded_file is not None:
     if selected_destinations:
         df_filtered = df_filtered[df_filtered[dest_col].astype(str).isin(selected_destinations)]
 
-    if cee_col and selected_cee:
+    if cee_col in df.columns and selected_cee:
         df_filtered = df_filtered[df_filtered[cee_col].astype(str).isin(selected_cee)]
 
     if status_filter == "Pending Reason Only":
@@ -224,10 +221,10 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # ==========================================
-    # 🏢 DEDICATED CEE WISE ANALYSIS BOX
+    # 🏢 CEE / CUSTOMER NAME WISE ANALYSIS BOX
     # ==========================================
-    if cee_col:
-        st.markdown("### 🏢 CEE-Wise Breakdown Analysis (CN Count, Box Count & Weight)")
+    if cee_col in df.columns:
+        st.markdown("### 🏢 CEE-Wise Breakdown Analysis (Customer Name, CN Count, Box Count & Weight)")
         
         cee_summary = df_filtered.groupby(cee_col).agg(
             CN_Count=(cn_col, 'count'),
@@ -236,6 +233,7 @@ if uploaded_file is not None:
             Max_Aging_HH=('HH_Numeric', 'max')
         ).reset_index().sort_values(by='CN_Count', ascending=False)
         
+        cee_summary = cee_summary.reset_index(drop=True)
         cee_summary.index = cee_summary.index + 1
         st.dataframe(cee_summary, height=220, use_container_width=True)
         st.markdown("---")
@@ -254,15 +252,13 @@ if uploaded_file is not None:
         }
         
         group_cols = [dest_col]
-        if cee_col:
-            group_cols.append(cee_col)
 
         dest_summary = df_filtered.groupby(group_cols).agg(**summary_cols).reset_index()
         dest_summary = dest_summary.sort_values(by='CN Count', ascending=False)
         dest_summary = dest_summary.reset_index(drop=True)
         dest_summary.index = dest_summary.index + 1
         
-        st.dataframe(dest_summary, height=360, use_container_width=True)
+        st.dataframe(dest_summary, height=240, use_container_width=True)
 
     with c_right:
         st.markdown("### 📊 Aging Distribution Chart")
@@ -294,7 +290,7 @@ if uploaded_file is not None:
             plot_bgcolor="#f8fafc", 
             font_color="#0f172a",
             showlegend=False,
-            height=360
+            height=240
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -304,7 +300,7 @@ if uploaded_file is not None:
     st.markdown("### 📋 Filtered CN Master Details")
     
     display_cols = [cn_col, dest_col]
-    if cee_col: display_cols.append(cee_col)
+    if cee_col in df.columns: display_cols.append(cee_col)
     if pkt_col: display_cols.append(pkt_col)
     if wt_col: display_cols.append(wt_col)
     if reason_col: display_cols.append(reason_col)
@@ -315,7 +311,7 @@ if uploaded_file is not None:
     master_view = df_filtered[display_cols].copy().reset_index(drop=True)
     master_view.index = master_view.index + 1
 
-    st.dataframe(master_view, height=380, use_container_width=True)
+    st.dataframe(master_view, height=300, use_container_width=True)
 
 else:
     st.info("💡 Kripya **Transhipment Failure Report** Excel/CSV file upload karein analysis ke liye.")

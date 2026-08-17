@@ -98,7 +98,7 @@ if uploaded_file is not None:
     cn_col = next((c for c in df_raw.columns if 'CN' in c.upper() or 'DOCKET' in c.upper()), df_raw.columns[0])
     
     if len(df_raw.columns) >= 8:
-        dest_col = df_raw.columns[7] # Col H
+        dest_col = df_raw.columns[7] # Col H (DESTINATION_NAME)
     else:
         dest_col = next((c for c in df_raw.columns if 'DEST' in c.upper() or 'NAME' in c.upper() or 'TODIST' in c.upper()), df_raw.columns[1])
 
@@ -106,6 +106,9 @@ if uploaded_file is not None:
     wt_col = next((c for c in df_raw.columns if 'TON' in c.upper() or 'WEIGHT' in c.upper() or 'WT' in c.upper()), None)
     aging_col = next((c for c in df_raw.columns if c.strip().upper() == 'HH' or 'HH' in c.upper() or 'AGING' in c.upper()), None)
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
+    
+    # Auto Detect CEE / CE Column (Col O: CEE_NAME)
+    cee_col = next((c for c in df_raw.columns if c.strip().upper() == 'CEE_NAME' or 'CEE' in c.upper() or 'CE' in c.upper()), None)
 
     # 1. Deduplication (Unique CNs)
     df = df_raw.drop_duplicates(subset=[cn_col]).copy()
@@ -135,23 +138,35 @@ if uploaded_file is not None:
 
     # 2. FILTERS PANEL
     st.markdown("### 🔍 Filters Panel")
-    f1, f2, f3 = st.columns(3)
+    f1, f2, f3, f4 = st.columns(4)
 
     with f1:
         dest_list = sorted(df[dest_col].dropna().astype(str).unique().tolist())
         selected_destinations = st.multiselect(
-            "📍 Filter By Destination Name (Col H):",
+            "📍 Filter By Destination Name:",
             options=dest_list,
             default=[]
         )
 
     with f2:
+        if cee_col:
+            cee_list = sorted(df[cee_col].dropna().astype(str).unique().tolist())
+            selected_cee = st.multiselect(
+                "🏢 Filter By CEE Wise:",
+                options=cee_list,
+                default=[]
+            )
+        else:
+            selected_cee = []
+            st.info("CEE column not found")
+
+    with f3:
         status_filter = st.selectbox(
             "⚡ Filter By Reason Status:",
             options=["All Status", "Pending Reason Only", "Updated Reason Only"]
         )
 
-    with f3:
+    with f4:
         bucket_options = ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs']
         selected_buckets = st.multiselect(
             "⏳ Filter By Aging Buckets:",
@@ -163,6 +178,9 @@ if uploaded_file is not None:
     df_filtered = df.copy()
     if selected_destinations:
         df_filtered = df_filtered[df_filtered[dest_col].astype(str).isin(selected_destinations)]
+
+    if cee_col and selected_cee:
+        df_filtered = df_filtered[df_filtered[cee_col].astype(str).isin(selected_cee)]
 
     if status_filter == "Pending Reason Only":
         df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
@@ -213,11 +231,16 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
-    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
+    # 3. DESTINATION & CEE SUMMARY (LEFT) + AGING CHART (RIGHT)
     c_left, c_right = st.columns([1, 1])
 
     with c_left:
-        st.markdown("### 📍 Destination Wise Summary")
+        st.markdown("### 📍 Destination & CEE Wise Summary")
+        
+        group_cols = [dest_col]
+        if cee_col:
+            group_cols.append(cee_col)
+
         summary_cols = {
             'CN Count': (cn_col, 'count'),
             'Total PKT': ('PKT_Numeric', 'sum'),
@@ -225,7 +248,8 @@ if uploaded_file is not None:
             'Max Aging (HH)': ('HH_Numeric', 'max')
         }
         
-        dest_summary = df_filtered.groupby(dest_col).agg(**summary_cols).reset_index()
+        dest_summary = df_filtered.groupby(group_cols).agg(**summary_cols).reset_index()
+        # Top to Low Sorting based on CN Count
         dest_summary = dest_summary.sort_values(by='CN Count', ascending=False)
         dest_summary = dest_summary.reset_index(drop=True)
         dest_summary.index = dest_summary.index + 1
@@ -272,6 +296,7 @@ if uploaded_file is not None:
     st.markdown("### 📋 Filtered CN Master Details")
     
     display_cols = [cn_col, dest_col]
+    if cee_col: display_cols.append(cee_col)
     if pkt_col: display_cols.append(pkt_col)
     if wt_col: display_cols.append(wt_col)
     if reason_col: display_cols.append(reason_col)

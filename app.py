@@ -69,14 +69,6 @@ st.markdown("""
         font-weight: 700 !important;
         font-size: 1.25rem !important;
     }
-
-    .metric-red-box div[data-testid="stMetric"] {
-        border: 2px solid #dc2626 !important;
-        background-color: #fef2f2 !important;
-    }
-    .metric-red-box div[data-testid="stMetricValue"] { 
-        color: #dc2626 !important; 
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -107,7 +99,7 @@ if uploaded_file is not None:
     aging_col = next((c for c in df_raw.columns if c.strip().upper() == 'HH' or 'HH' in c.upper() or 'AGING' in c.upper()), None)
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
     
-    # Auto Detect CEE / CE Column (Col O: CEE_NAME)
+    # Auto Detect CEE Column (Col O: CEE_NAME)
     cee_col = next((c for c in df_raw.columns if c.strip().upper() == 'CEE_NAME' or 'CEE' in c.upper() or 'CE' in c.upper()), None)
 
     # 1. Deduplication (Unique CNs)
@@ -231,25 +223,41 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
-    # 3. DESTINATION & CEE SUMMARY (LEFT) + AGING CHART (RIGHT)
+    # ==========================================
+    # 🏢 DEDICATED CEE WISE ANALYSIS BOX
+    # ==========================================
+    if cee_col:
+        st.markdown("### 🏢 CEE-Wise Breakdown Analysis (CN Count, Box Count & Weight)")
+        
+        cee_summary = df_filtered.groupby(cee_col).agg(
+            CN_Count=(cn_col, 'count'),
+            CN_Box_Count=('PKT_Numeric', 'sum'),
+            Total_Weight_TON=('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
+            Max_Aging_HH=('HH_Numeric', 'max')
+        ).reset_index().sort_values(by='CN_Count', ascending=False)
+        
+        cee_summary.index = cee_summary.index + 1
+        st.dataframe(cee_summary, height=220, use_container_width=True)
+        st.markdown("---")
+
+    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
     c_left, c_right = st.columns([1, 1])
 
     with c_left:
-        st.markdown("### 📍 Destination & CEE Wise Summary")
+        st.markdown("### 📍 Destination Wise Summary")
+        
+        summary_cols = {
+            'CN Count': (cn_col, 'count'),
+            'CN Box Count': ('PKT_Numeric', 'sum'),
+            'Total Weight (TON)': ('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
+            'Max Aging (HH)': ('HH_Numeric', 'max')
+        }
         
         group_cols = [dest_col]
         if cee_col:
             group_cols.append(cee_col)
 
-        summary_cols = {
-            'CN Count': (cn_col, 'count'),
-            'Total PKT': ('PKT_Numeric', 'sum'),
-            'Total Weight (TON)': ('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
-            'Max Aging (HH)': ('HH_Numeric', 'max')
-        }
-        
         dest_summary = df_filtered.groupby(group_cols).agg(**summary_cols).reset_index()
-        # Top to Low Sorting based on CN Count
         dest_summary = dest_summary.sort_values(by='CN Count', ascending=False)
         dest_summary = dest_summary.reset_index(drop=True)
         dest_summary.index = dest_summary.index + 1

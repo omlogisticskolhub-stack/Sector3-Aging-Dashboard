@@ -97,8 +97,8 @@ if uploaded_file is not None:
     aging_col = next((c for c in df_raw.columns if c.strip().upper() == 'HH' or 'HH' in c.upper() or 'AGING' in c.upper()), None)
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
     
-    # Auto Detect CEE Column (Col O: CEE_NAME)
-    cee_col = next((c for c in df_raw.columns if c.strip().upper() == 'CEE_NAME' or 'CEE' in c.upper() or 'CE' in c.upper()), 'CEE_NAME')
+    # Strictly target CEE_NAME (Fixed bug where 'CE' was catching SOURCE_BCODE)
+    cee_col = next((c for c in df_raw.columns if 'CEE' in c.upper()), 'CEE_NAME')
 
     # 1. Deduplication (Unique CNs)
     df = df_raw.drop_duplicates(subset=[cn_col]).copy()
@@ -226,7 +226,7 @@ if uploaded_file is not None:
     if cee_col in df.columns:
         st.markdown("### 🏢 CEE-Wise Breakdown Analysis (Customer Name, CN Count, Box Count & Weight)")
         
-        cee_summary = df_filtered.groupby(cee_col).agg(
+        cee_summary = df_filtered.groupby([cee_col]).agg(
             CN_Count=(cn_col, 'count'),
             CN_Box_Count=('PKT_Numeric', 'sum'),
             Total_Weight_TON=('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),

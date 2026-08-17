@@ -97,7 +97,6 @@ if uploaded_file is not None:
     aging_col = next((c for c in df_raw.columns if c.strip().upper() == 'HH' or 'HH' in c.upper() or 'AGING' in c.upper()), None)
     reason_col = next((c for c in df_raw.columns if 'REASON' in c.upper() or 'REMARK' in c.upper() or 'UNDLVRD' in c.upper() or 'UPDATE' in c.upper()), None)
     
-    # Strictly target CEE_NAME (Fixed bug where 'CE' was catching SOURCE_BCODE)
     cee_col = next((c for c in df_raw.columns if 'CEE' in c.upper()), 'CEE_NAME')
 
     # 1. Deduplication (Unique CNs)
@@ -221,24 +220,8 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # ==========================================
-    # 🏢 CEE / CUSTOMER NAME WISE ANALYSIS BOX
+    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT) - MOVED TO TOP
     # ==========================================
-    if cee_col in df.columns:
-        st.markdown("### 🏢 CEE-Wise Breakdown Analysis (Customer Name, CN Count, Box Count & Weight)")
-        
-        cee_summary = df_filtered.groupby([cee_col]).agg(
-            CN_Count=(cn_col, 'count'),
-            CN_Box_Count=('PKT_Numeric', 'sum'),
-            Total_Weight_TON=('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
-            Max_Aging_HH=('HH_Numeric', 'max')
-        ).reset_index().sort_values(by='CN_Count', ascending=False)
-        
-        cee_summary = cee_summary.reset_index(drop=True)
-        cee_summary.index = cee_summary.index + 1
-        st.dataframe(cee_summary, height=220, use_container_width=True)
-        st.markdown("---")
-
-    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
     c_left, c_right = st.columns([1, 1])
 
     with c_left:
@@ -296,7 +279,27 @@ if uploaded_file is not None:
 
     st.markdown("---")
 
+    # ==========================================
+    # 🏢 CEE / CUSTOMER NAME WISE ANALYSIS BOX - MOVED BELOW
+    # ==========================================
+    if cee_col in df.columns:
+        st.markdown("### 🏢 CEE-Wise Breakdown Analysis (Customer Name, CN Count, Box Count & Weight)")
+        
+        cee_summary = df_filtered.groupby([cee_col]).agg(
+            CN_Count=(cn_col, 'count'),
+            CN_Box_Count=('PKT_Numeric', 'sum'),
+            Total_Weight_TON=('WT_Numeric', lambda x: round(x.sum() / (1000 if tot_wt_raw > 1000 else 1), 2)),
+            Max_Aging_HH=('HH_Numeric', 'max')
+        ).reset_index().sort_values(by='CN_Count', ascending=False)
+        
+        cee_summary = cee_summary.reset_index(drop=True)
+        cee_summary.index = cee_summary.index + 1
+        st.dataframe(cee_summary, height=220, use_container_width=True)
+        st.markdown("---")
+
+    # ==========================================
     # 4. FILTERED MASTER DETAILS TABLE
+    # ==========================================
     st.markdown("### 📋 Filtered CN Master Details")
     
     display_cols = [cn_col, dest_col]

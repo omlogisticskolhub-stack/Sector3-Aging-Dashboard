@@ -43,24 +43,11 @@ if not check_password():
     st.stop()
 # ==========================================
 
-# Custom Styling to fix multi-select tag overflow and text hiding
+# Custom Styling
 st.markdown("""
     <style>
     .stApp { background-color: #f8fafc; color: #0f172a; }
     
-    /* Fix Multiselect Tag Wrapping so text never hides or goes inward */
-    .stMultiSelect div[data-baseweb="select"] {
-        flex-wrap: wrap !important;
-        height: auto !important;
-        min-height: 42px !important;
-        padding-bottom: 4px !important;
-    }
-    .stMultiSelect span[data-baseweb="tag"] {
-        white-space: normal !important;
-        height: auto !important;
-        margin: 2px !important;
-    }
-
     div[data-testid="stMetric"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -138,80 +125,50 @@ if uploaded_file is not None:
     kpi_container = st.container()
     st.markdown("---")
 
-    # ==========================================
-    # 2. FILTERS PANEL (2 WIDE COLUMNS)
-    # ==========================================
+    # 2. FILTERS PANEL
     st.markdown("### 🔍 Filters Panel")
-    
-    dest_list = sorted(df[dest_col].dropna().astype(str).unique().tolist())
-    cee_list = sorted(df[cee_col].dropna().astype(str).unique().tolist()) if cee_col in df.columns else []
-    bucket_options = ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs']
+    f1, f2, f3, f4 = st.columns(4)
 
-    # Initialize session states
-    if "dest_ms" not in st.session_state:
-        st.session_state["dest_ms"] = dest_list
-    if "cee_ms" not in st.session_state:
-        st.session_state["cee_ms"] = cee_list if cee_list else []
-    if "bucket_ms" not in st.session_state:
-        st.session_state["bucket_ms"] = bucket_options
-
-    fc1, fc2 = st.columns(2)
-
-    with fc1:
-        st.markdown("📍 **Destination Name**")
-        def toggle_dest():
-            if st.session_state.get("all_dest", False):
-                st.session_state["dest_ms"] = dest_list
-            else:
-                st.session_state["dest_ms"] = []
-
-        st.checkbox("Select All Destinations", value=True, key="all_dest", on_change=toggle_dest)
-        selected_destinations = st.multiselect("Filter By Destination Name:", options=dest_list, key="dest_ms", label_visibility="collapsed")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("⚡ **Reason Status**")
-        status_filter = st.selectbox(
-            "Filter By Reason Status:",
-            options=["All Status", "Pending Reason Only", "Updated Reason Only"],
-            label_visibility="collapsed"
+    with f1:
+        dest_list = sorted(df[dest_col].dropna().astype(str).unique().tolist())
+        selected_destinations = st.multiselect(
+            "📍 Filter By Destination Name:",
+            options=dest_list,
+            default=[]
         )
 
-    with fc2:
-        st.markdown("🏢 **Customer Name (CEE)**")
-        if cee_list:
-            def toggle_cee():
-                if st.session_state.get("all_cee", False):
-                    st.session_state["cee_ms"] = cee_list
-                else:
-                    st.session_state["cee_ms"] = []
-
-            st.checkbox("Select All CEE", value=True, key="all_cee", on_change=toggle_cee)
-            selected_cee = st.multiselect("Filter By Customer Name (CEE):", options=cee_list, key="cee_ms", label_visibility="collapsed")
+    with f2:
+        if cee_col in df.columns:
+            cee_list = sorted(df[cee_col].dropna().astype(str).unique().tolist())
+            selected_cee = st.multiselect(
+                "🏢 Filter By Customer Name (CEE):",
+                options=cee_list,
+                default=[]
+            )
         else:
             selected_cee = []
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("⏳ **Aging Buckets**")
-        def toggle_buckets():
-            if st.session_state.get("all_buckets", False):
-                st.session_state["bucket_ms"] = bucket_options
-            else:
-                st.session_state["bucket_ms"] = []
+    with f3:
+        status_filter = st.selectbox(
+            "⚡ Filter By Reason Status:",
+            options=["All Status", "Pending Reason Only", "Updated Reason Only"]
+        )
 
-        st.checkbox("Select All Buckets", value=True, key="all_buckets", on_change=toggle_buckets)
-        selected_buckets = st.multiselect("Filter By Aging Buckets:", options=bucket_options, key="bucket_ms", label_visibility="collapsed")
+    with f4:
+        bucket_options = ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs']
+        selected_buckets = st.multiselect(
+            "⏳ Filter By Aging Buckets:",
+            options=bucket_options,
+            default=bucket_options
+        )
 
     # APPLY FILTERS
     df_filtered = df.copy()
     if selected_destinations:
         df_filtered = df_filtered[df_filtered[dest_col].astype(str).isin(selected_destinations)]
-    else:
-        df_filtered = df_filtered.iloc[0:0]
 
     if cee_col in df.columns and selected_cee:
         df_filtered = df_filtered[df_filtered[cee_col].astype(str).isin(selected_cee)]
-    elif cee_col in df.columns:
-        df_filtered = df_filtered.iloc[0:0]
 
     if status_filter == "Pending Reason Only":
         df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
@@ -220,14 +177,8 @@ if uploaded_file is not None:
 
     if selected_buckets:
         df_filtered = df_filtered[df_filtered['Aging_Bucket'].isin(selected_buckets)]
-    else:
-        df_filtered = df_filtered.iloc[0:0]
 
-    st.markdown("---")
-
-    # ==========================================
-    # 3. TOP OPERATIONAL SUMMARY KPIS
-    # ==========================================
+    # 1. TOP 5 OPERATIONAL SUMMARY KPIS
     with kpi_container:
         st.markdown("### 📊 Operational Summary KPIs")
         
@@ -269,7 +220,7 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # ==========================================
-    # 4. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
+    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT) - MOVED TO TOP
     # ==========================================
     c_left, c_right = st.columns([1, 1])
 
@@ -329,7 +280,7 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # ==========================================
-    # 5. CEE / CUSTOMER NAME WISE ANALYSIS BOX
+    # 🏢 CEE / CUSTOMER NAME WISE ANALYSIS BOX - MOVED BELOW
     # ==========================================
     if cee_col in df.columns:
         st.markdown("### 🏢 CEE-Wise Breakdown Analysis (Customer Name, CN Count, Box Count & Weight)")
@@ -347,7 +298,7 @@ if uploaded_file is not None:
         st.markdown("---")
 
     # ==========================================
-    # 6. FILTERED MASTER DETAILS TABLE
+    # 4. FILTERED MASTER DETAILS TABLE
     # ==========================================
     st.markdown("### 📋 Filtered CN Master Details")
     

@@ -125,31 +125,44 @@ if uploaded_file is not None:
     kpi_container = st.container()
     st.markdown("---")
 
-    # 2. FILTERS PANEL
+    # 2. FILTERS PANEL WITH SESSION STATE SYNC FOR SELECT ALL
     st.markdown("### 🔍 Filters Panel")
     f1, f2, f3, f4 = st.columns(4)
 
     dest_list = sorted(df[dest_col].dropna().astype(str).unique().tolist())
     cee_list = sorted(df[cee_col].dropna().astype(str).unique().tolist()) if cee_col in df.columns else []
+    bucket_options = ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs']
+
+    # Initialize session states
+    if "dest_ms" not in st.session_state:
+        st.session_state["dest_ms"] = dest_list
+    if "cee_ms" not in st.session_state:
+        st.session_state["cee_ms"] = cee_list if cee_list else []
+    if "bucket_ms" not in st.session_state:
+        st.session_state["bucket_ms"] = bucket_options
 
     with f1:
         st.markdown("📍 **Destination Name**")
-        select_all_dest = st.checkbox("Select All Destinations", value=False, key="all_dest")
-        if select_all_dest:
-            selected_destinations = dest_list
-            st.multiselect("Filter By Destination Name:", options=dest_list, default=dest_list, key="dest_ms", label_visibility="collapsed")
-        else:
-            selected_destinations = st.multiselect("Filter By Destination Name:", options=dest_list, default=[], key="dest_ms", label_visibility="collapsed")
+        def toggle_dest():
+            if st.session_state.get("all_dest", False):
+                st.session_state["dest_ms"] = dest_list
+            else:
+                st.session_state["dest_ms"] = []
+
+        st.checkbox("Select All Destinations", value=True, key="all_dest", on_change=toggle_dest)
+        selected_destinations = st.multiselect("Filter By Destination Name:", options=dest_list, key="dest_ms", label_visibility="collapsed")
 
     with f2:
         st.markdown("🏢 **Customer Name (CEE)**")
-        if cee_col in df.columns:
-            select_all_cee = st.checkbox("Select All CEE", value=False, key="all_cee")
-            if select_all_cee:
-                selected_cee = cee_list
-                st.multiselect("Filter By Customer Name (CEE):", options=cee_list, default=cee_list, key="cee_ms", label_visibility="collapsed")
-            else:
-                selected_cee = st.multiselect("Filter By Customer Name (CEE):", options=cee_list, default=[], key="cee_ms", label_visibility="collapsed")
+        if cee_list:
+            def toggle_cee():
+                if st.session_state.get("all_cee", False):
+                    st.session_state["cee_ms"] = cee_list
+                else:
+                    st.session_state["cee_ms"] = []
+
+            st.checkbox("Select All CEE", value=True, key="all_cee", on_change=toggle_cee)
+            selected_cee = st.multiselect("Filter By Customer Name (CEE):", options=cee_list, key="cee_ms", label_visibility="collapsed")
         else:
             selected_cee = []
 
@@ -163,21 +176,26 @@ if uploaded_file is not None:
 
     with f4:
         st.markdown("⏳ **Aging Buckets**")
-        bucket_options = ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs']
-        select_all_buckets = st.checkbox("Select All Buckets", value=True, key="all_buckets")
-        if select_all_buckets:
-            selected_buckets = bucket_options
-            st.multiselect("Filter By Aging Buckets:", options=bucket_options, default=bucket_options, key="bucket_ms", label_visibility="collapsed")
-        else:
-            selected_buckets = st.multiselect("Filter By Aging Buckets:", options=bucket_options, default=[], key="bucket_ms", label_visibility="collapsed")
+        def toggle_buckets():
+            if st.session_state.get("all_buckets", False):
+                st.session_state["bucket_ms"] = bucket_options
+            else:
+                st.session_state["bucket_ms"] = []
+
+        st.checkbox("Select All Buckets", value=True, key="all_buckets", on_change=toggle_buckets)
+        selected_buckets = st.multiselect("Filter By Aging Buckets:", options=bucket_options, key="bucket_ms", label_visibility="collapsed")
 
     # APPLY FILTERS
     df_filtered = df.copy()
     if selected_destinations:
         df_filtered = df_filtered[df_filtered[dest_col].astype(str).isin(selected_destinations)]
+    else:
+        df_filtered = df_filtered.iloc[0:0] # Empty if nothing selected
 
     if cee_col in df.columns and selected_cee:
         df_filtered = df_filtered[df_filtered[cee_col].astype(str).isin(selected_cee)]
+    elif cee_col in df.columns:
+        df_filtered = df_filtered.iloc[0:0]
 
     if status_filter == "Pending Reason Only":
         df_filtered = df_filtered[df_filtered['Reason_Status'] == "Pending"]
@@ -186,6 +204,8 @@ if uploaded_file is not None:
 
     if selected_buckets:
         df_filtered = df_filtered[df_filtered['Aging_Bucket'].isin(selected_buckets)]
+    else:
+        df_filtered = df_filtered.iloc[0:0]
 
     # 1. TOP 5 OPERATIONAL SUMMARY KPIS
     with kpi_container:

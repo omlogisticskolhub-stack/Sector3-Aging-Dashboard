@@ -129,38 +129,47 @@ if uploaded_file is not None:
     st.markdown("### 🔍 Filters Panel")
     f1, f2, f3, f4 = st.columns(4)
 
+    dest_list = sorted(df[dest_col].dropna().astype(str).unique().tolist())
+    cee_list = sorted(df[cee_col].dropna().astype(str).unique().tolist()) if cee_col in df.columns else []
+
     with f1:
-        dest_list = sorted(df[dest_col].dropna().astype(str).unique().tolist())
-        selected_destinations = st.multiselect(
-            "📍 Filter By Destination Name:",
-            options=dest_list,
-            default=[]
-        )
+        st.markdown("📍 **Destination Name**")
+        select_all_dest = st.checkbox("Select All Destinations", value=False, key="all_dest")
+        if select_all_dest:
+            selected_destinations = dest_list
+            st.multiselect("Filter By Destination Name:", options=dest_list, default=dest_list, key="dest_ms", label_visibility="collapsed")
+        else:
+            selected_destinations = st.multiselect("Filter By Destination Name:", options=dest_list, default=[], key="dest_ms", label_visibility="collapsed")
 
     with f2:
+        st.markdown("🏢 **Customer Name (CEE)**")
         if cee_col in df.columns:
-            cee_list = sorted(df[cee_col].dropna().astype(str).unique().tolist())
-            selected_cee = st.multiselect(
-                "🏢 Filter By Customer Name (CEE):",
-                options=cee_list,
-                default=[]
-            )
+            select_all_cee = st.checkbox("Select All CEE", value=False, key="all_cee")
+            if select_all_cee:
+                selected_cee = cee_list
+                st.multiselect("Filter By Customer Name (CEE):", options=cee_list, default=cee_list, key="cee_ms", label_visibility="collapsed")
+            else:
+                selected_cee = st.multiselect("Filter By Customer Name (CEE):", options=cee_list, default=[], key="cee_ms", label_visibility="collapsed")
         else:
             selected_cee = []
 
     with f3:
+        st.markdown("⚡ **Reason Status**")
         status_filter = st.selectbox(
-            "⚡ Filter By Reason Status:",
-            options=["All Status", "Pending Reason Only", "Updated Reason Only"]
+            "Filter By Reason Status:",
+            options=["All Status", "Pending Reason Only", "Updated Reason Only"],
+            label_visibility="collapsed"
         )
 
     with f4:
+        st.markdown("⏳ **Aging Buckets**")
         bucket_options = ['0-24 Hrs', '24-48 Hrs', '48-72 Hrs', '72+ Hrs']
-        selected_buckets = st.multiselect(
-            "⏳ Filter By Aging Buckets:",
-            options=bucket_options,
-            default=bucket_options
-        )
+        select_all_buckets = st.checkbox("Select All Buckets", value=True, key="all_buckets")
+        if select_all_buckets:
+            selected_buckets = bucket_options
+            st.multiselect("Filter By Aging Buckets:", options=bucket_options, default=bucket_options, key="bucket_ms", label_visibility="collapsed")
+        else:
+            selected_buckets = st.multiselect("Filter By Aging Buckets:", options=bucket_options, default=[], key="bucket_ms", label_visibility="collapsed")
 
     # APPLY FILTERS
     df_filtered = df.copy()
@@ -220,7 +229,7 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # ==========================================
-    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT) - MOVED TO TOP
+    # 3. DESTINATION SUMMARY (LEFT) + AGING CHART (RIGHT)
     # ==========================================
     c_left, c_right = st.columns([1, 1])
 
@@ -280,7 +289,7 @@ if uploaded_file is not None:
     st.markdown("---")
 
     # ==========================================
-    # 🏢 CEE / CUSTOMER NAME WISE ANALYSIS BOX - MOVED BELOW
+    # 🏢 CEE / CUSTOMER NAME WISE ANALYSIS BOX
     # ==========================================
     if cee_col in df.columns:
         st.markdown("### 🏢 CEE-Wise Breakdown Analysis (Customer Name, CN Count, Box Count & Weight)")

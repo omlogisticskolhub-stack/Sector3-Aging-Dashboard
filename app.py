@@ -15,7 +15,7 @@ st.set_page_config(
 def check_password():
     """Returns True if the user had the correct password."""
     def password_entered():
-        if st.session_state["password"] == "Dhiraj@01072026":
+        if st.session_state["password"] == "123456":
             st.session_state["password_correct"] = True
             del st.session_state["password"]  
         else:
